@@ -121,6 +121,7 @@ cp .env.example .env
 | `SUB2API_URL` / `SUB2API_EMAIL` / `SUB2API_PASSWORD` | SUB2API 管理接口登录 | 用 SUB2API 时 |
 | `SUB2API_GROUP` | SUB2API 目标分组名（默认 `codex`，需后台先建好） | 否 |
 | `WEBCHAT2API_URL` / `WEBCHAT2API_KEY` | webchat2api（Grok sso 注入） | 用 Grok 时 |
+| `CHATGPT2API_URL` / `CHATGPT2API_KEY` | chatgpt2api 普通网页号导入（`POST /api/accounts`，Bearer admin key） | 用 `--import-c2a` 时 |
 | `SMS_PROJECT_ID_OPENAI` / `HERO_SMS_SERVICE_OPENAI` | ChatGPT add-phone 接码服务号 | 自动接码时 |
 
 ---
@@ -131,10 +132,12 @@ cp .env.example .env
 ```bash
 python run_full_flow.py                       # 注册 1 个 outlook 号后在 claude 上注册
 python run_full_flow.py --platforms claude chatgpt grok
+python run_full_flow.py --platforms chatgpt --import-c2a   # chatgpt 注册成功后即时导入 chatgpt2api
 python run_full_flow.py --skip-email --email a@outlook.com --password xxx
 python run_full_flow.py --dry-run             # 只打印将执行的命令
 ```
 > 自动注入 `HTTP(S)_PROXY` 与 `CLASH_API/SECRET/GROUP` 给子进程。
+> `--import-c2a` 逐层透传到 `register_chatgpt.py`，只对 chatgpt 平台生效，需先配 `CHATGPT2API_URL/KEY`。
 
 ### 仅三平台注册（已有邮箱池 emails.txt）
 ```bash
@@ -368,6 +371,22 @@ python upload_tokens.py grok       # 只传 Grok（webchat2api）
 > id_token），下游过期不能续期。**Codex 进 SUB2API/CPA 的正路是上面 ② 的 `oauth_codex.py`（带真
 > `refresh_token`）**；本路径仅供没走 OAuth 的批量兜底。
 
+### ③.5 普通 ChatGPT 网页号 → chatgpt2api
+普通网页号（非 codex/OAuth 三件套）单独走 chatgpt2api（basketikun/chatgpt2api）。注册成功时
+顺手落 `tokens/chatgpt/c2a-*.json`；上传两种方式：
+```bash
+# 方式 A：注册时即时导入（推荐，需先配 CHATGPT2API_URL/KEY）
+python register_chatgpt.py --count 5 --import-c2a
+python run_full_flow.py --platforms chatgpt --import-c2a
+
+# 方式 B：事后批量聚合上传 / 导出
+python export_chatgpt2api.py --post https://<host> --key <admin>   # 直接 POST /api/accounts
+python export_chatgpt2api.py                                       # 导出 access_token 列表（粘进批量框）
+python export_chatgpt2api.py --json                                # 导出 {accounts:[...]} JSON
+```
+> 只认 `access_token`（**不带 `type:"codex"`**，否则被对端当 codex 源）。网页号无真 `refresh_token`，
+> access_token 约 10 天过期后对端续不了命，属预期。重复 token 对端按 skipped 幂等处理。
+
 ### ④ Claude / SuperGrok 订阅授权 🔜
 订阅入口走环境变量 `CLAUDE_SUB_URL`（`https://6661231.xyz/#/claude`）、
 `GROK_SUB_URL`（`https://6661231.xyz/#/grok`）。**激活码 CDK 流程 + 授权到 SUB2API / CPA
@@ -395,6 +414,7 @@ python upload_tokens.py grok       # 只传 Grok（webchat2api）
 | `activate_plus.py` | baxigpt 激活码开通 Plus / Codex 订阅 |
 | `oauth_codex.py` | Codex OAuth → SUB2API + CPA（带 refresh_token，支持 `--manual-phone`） |
 | `upload_tokens.py` | 把 `tokens/` 标准 token 上传到 CPA / SUB2API / webchat2api |
+| `export_chatgpt2api.py` | 聚合普通网页号 → chatgpt2api 导入（`--post` 直传 / 导出 txt/json） |
 | `export_accounts.py` | 导出已注册账号 cookie |
 | `mailbox_broker.py` | 共享取码服务（避免并发登录同一邮箱） |
 
