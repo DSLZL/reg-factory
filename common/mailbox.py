@@ -154,8 +154,9 @@ def get_code_by_token(
                     continue
                 if _too_old(m):
                     continue  # resend 前的旧码，已作废，跳过
-                # 优先在主题里找验证码（很多服务把 code 放主题），再到正文
-                for text in (m["subject"] or "", m["body"] or ""):
+                # 优先在主题里找验证码（很多服务把 code 放主题），再到正文。
+                # 正文先剥 HTML：避免命中 inline CSS 的 #202123 等 hex 色值(伪 6 位码)。
+                for text in (m["subject"] or "", _strip_html(m["body"] or "")):
                     mm = pat.search(text)
                     if mm:
                         code = _first_group(mm)
@@ -349,6 +350,18 @@ def _first_group(m):
         if g:
             return g
     return m.group(0)
+
+
+def _strip_html(text):
+    """去掉 HTML 标签(含 style 属性里的 #202123 等十六进制色值)，只留可见文本。
+    坑：OpenAI 验证码邮件正文 HTML 里 inline CSS 有 color:#202123 这类 6 位 hex，
+    \\b\\d{6}\\b 正则会先命中它(固定取到 202123)而不是真验证码。先剥标签再匹配可避开。"""
+    if not text:
+        return ""
+    # 整段移除 <style>/<script> 块，再去所有标签(标签内的 style="...#hex..." 一并消失)
+    text = re.sub(r"<(style|script)[^>]*>.*?</\1>", " ", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    return text
 
 
 async def _scan_current_folder(page, pat, sender_hint, subject_hint):
