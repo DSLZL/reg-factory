@@ -58,7 +58,8 @@ def log(msg, level="INFO"):
 
 # ---------------------------------------------------------------- emails.txt
 def read_fresh_emails():
-    """返回 emails.txt 里全部 (email, password) 条目（含已 reserve 的，纯快照用于 diff）。"""
+    """返回 emails.txt 里全部 (email, password, token, client_id) 条目（含已 reserve 的，纯快照用于 diff）。
+    token/client_id 由 outlook_reg_loop 注册成功后抽 Graph 写入；缺列回退空串。"""
     out = []
     if not os.path.isfile(EMAILS_FILE):
         return out
@@ -68,7 +69,11 @@ def read_fresh_emails():
             if not line or line.startswith("#"):
                 continue
             parts = line.split("----")
-            out.append((parts[0].strip(), parts[1].strip() if len(parts) > 1 else ""))
+            email = parts[0].strip()
+            password = parts[1].strip() if len(parts) > 1 else ""
+            token = parts[2].strip() if len(parts) > 2 else ""
+            client_id = parts[3].strip() if len(parts) > 3 else ""
+            out.append((email, password, token, client_id))
     return out
 
 
@@ -93,7 +98,7 @@ def build_child_env(args):
 # ---------------------------------------------------------------- Stage A
 def stage_email(args, env):
     """拉起 outlook_reg_loop.py，盯 emails.txt，拿到一个新号就停。返回 (email, password) 或 None。"""
-    before = {e for e, _ in read_fresh_emails()}
+    before = {e for e, _p, _t, _c in read_fresh_emails()}
     log(f"Stage A 邮箱注册启动；emails.txt 现有 {len(before)} 个号", "A")
 
     cmd = [
@@ -129,7 +134,7 @@ def stage_email(args, env):
             if now - last_check >= 2:
                 last_check = now
                 cur = read_fresh_emails()
-                fresh = [(e, p) for e, p in cur if e not in before]
+                fresh = [t for t in cur if t[0] not in before]
                 if fresh:
                     new_email = fresh[-1]
                     log(f"检测到新邮箱：{new_email[0]} —— 停止 Stage A 循环", "A")
@@ -150,18 +155,22 @@ def stage_email(args, env):
 
 
 # ---------------------------------------------------------------- Stage B
-def stage_platforms(args, env, email, password):
+def stage_platforms(args, env, email, password, token="", client_id=""):
     log(f"Stage B 平台注册：{email}  platforms={','.join(args.platforms)}", "B")
+    # token 由 Stage A 注册时抽 Graph 写入 emails.txt；有真 token 走 Graph API 直收码(免浏览器)，
+    # 没有(抽取失败回退 fresh/空)则下游退化到浏览器/broker 取码。
     cmd = [
         sys.executable, "register_three_platforms.py",
         "--email", email,
         "--password", password or "",
-        "--token", "fresh",        # 占位：Graph token 失败 -> 回退浏览器/broker 取码
+        "--token", (token or "fresh"),
         "--platforms", *args.platforms,
         "--node", args.node,
         "--timeout", str(args.platform_timeout),
         "--broker", args.broker,
     ]
+    if client_id and client_id != "fresh":
+        cmd += ["--client-id", client_id]
     if args.keep_on_fail:
         cmd.append("--keep-on-fail")
     if args.import_c2a:
@@ -184,6 +193,7 @@ def run_once(args, env):
     """跑一轮 A+B。返回 Stage B 的 exit code（0=成功）；没拿到邮箱返回 1。"""
     t0 = time.time()
     # Stage A
+    token = client_id = ""
     if args.skip_email:
         if not args.email:
             raise SystemExit("--skip-email 需要同时给 --email")
@@ -194,13 +204,13 @@ def run_once(args, env):
         if not got:
             log("Stage A 没拿到可用邮箱，本轮终止", "ERR")
             return 1, ""
-        email, password = got
+        email, password, token, client_id = got
         # emails.txt 里可能没记密码，用快照里的
         password = password or args.password
 
     # Stage B
     print("=" * 64)
-    rc = stage_platforms(args, env, email, password)
+    rc = stage_platforms(args, env, email, password, token, client_id)
     print("=" * 64)
     dt = time.time() - t0
     log(f"本轮结束  email={email}  Stage B exit={rc}  用时 {dt:.0f}s",
