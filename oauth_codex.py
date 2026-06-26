@@ -63,8 +63,8 @@ async def main():
                         help="add-phone 手动模式:不接码,自己在浏览器填号+输码(如 WhatsApp 码)")
     parser.add_argument("--phone", default="",
                         help="add-phone 半自动:脚本填该号(E.164,如 +8618001623966)+选 WhatsApp+发送,你只手输码")
-    parser.add_argument("--phone-skip", type=int, default=3,
-                        help="先赌免手机直连的次数(默认3)：每次关窗重开+重登重摇风控，弹手机就跳过；用尽才接码。想直接接码设 0")
+    parser.add_argument("--phone-skip", type=int, default=0,
+                        help="先赌免手机直连的次数(默认0=直接一次性接码,不赌免手机)：>0 时每次关窗重开+重登重摇风控，弹手机就跳过，用尽才接码")
     parser.add_argument("--skip-cpa", action="store_true",
                         help="不把 OAuth 凭据推到 CPA(默认 CPA 配好就推,带真 refresh_token)")
     parser.add_argument("--keep", action="store_true", help="失败保留窗口")
@@ -126,9 +126,12 @@ async def main():
             group_id = ox.find_group_id(origin, token, args.group)
             print(f"  SUB2API: group={args.group}(#{group_id})")
 
-            # 浏览器驱动授权：先免手机直连 N 次(每次关窗重开+重登=全新会话重摇风控)，弹手机才在最后一次接码/手动
+            # 浏览器驱动授权：phone_skip>0 时先免手机直连 N 次(关窗重登重摇风控)，弹手机才接码；=0 直接一次性接码
             _mode = "，add-phone 半自动(填号+选WhatsApp+发送)" if args.phone else ("，add-phone 手动模式" if args.manual_phone else "")
-            print(f"  打开授权页，免手机直连先试 {args.phone_skip}次{_mode}...")
+            if args.phone_skip > 0:
+                print(f"  打开授权页，免手机直连先试 {args.phone_skip}次{_mode}...")
+            else:
+                print(f"  打开授权页，直接一次性接码(不赌免手机){_mode}...")
             reset_fn = ox.make_reset_page(p, cookies, account_email=email) if args.phone_skip > 0 else None
             code, session_id, cb_state, msg = await ox.authorize_with_retry(
                 page, lambda: ox.generate_auth_url(origin, token),

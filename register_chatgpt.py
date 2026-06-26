@@ -366,15 +366,16 @@ async def extract_codex(page, email, p=None, ctx=None):
     import os as _os
     _ph_budget = int(_os.environ.get("CODEX_ADDPHONE_ATTEMPTS", "2")) * int(_os.environ.get("CODEX_SMS_TIMEOUT", "150"))
     timeout = max(CODEX_TIMEOUT, 300, _ph_budget + 120)
-    # 免手机直连尝试次数：每次都重开窗口+cookie重登+重新生成 auth_url(全新会话=重摇风控骰子)，
-    # 弹手机就跳过本次换下一次赌，N 次都弹才在最后一次真接码。默认 3(按预期多赌几次免手机)。
-    # 实测部分新号 OAuth 必弹手机(手机要求偏向绑账号)，赌不到就走接码；想直接接码设 0。
-    skip_n = int(_os.environ.get("CODEX_PHONE_SKIP_ATTEMPTS", "3") or "3")
+    # 免手机直连尝试次数：>0 时每次重开窗口+cookie重登+重新生成 auth_url(全新会话=重摇风控)，
+    # 弹手机就跳过本次换下一次赌，N 次都弹才在最后一次真接码。默认 0=直接一次性接码(不赌免手机)。
+    # 实测部分新号 OAuth 必弹手机(手机要求偏向绑账号)，赌免手机多半白跑，故默认直接接码；想赌设 N>0。
+    skip_n = int(_os.environ.get("CODEX_PHONE_SKIP_ATTEMPTS", "0") or "0")
     try:
         # SUB2API: 登录 + 找 openai 分组（PKCE/换码由 SUB2API 包办）
         token = ox.sub2api_login(origin, SUB2API_EMAIL, SUB2API_PASSWORD)
         group_id = ox.find_group_id(origin, token, group)
-        print(f"  [codex] SUB2API: group={group}(#{group_id})，免手机直连先试 {skip_n} 次，弹手机才接码")
+        _skipmsg = f"免手机直连先试 {skip_n} 次，弹手机才接码" if skip_n > 0 else "直接一次性接码(不赌免手机)"
+        print(f"  [codex] SUB2API: group={group}(#{group_id})，{_skipmsg}")
 
         # 每次尝试关窗口重开+重登(cookie)，确保是 OpenAI 眼里全新会话(同窗口重发 auth_url
         # 不改变其"要不要手机"的风控决定)，且避开刚注册窗口的促销弹层(Claim offer 等会挡住

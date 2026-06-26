@@ -706,7 +706,8 @@ async def authorize_with_retry(page, gen_auth_url, account_email="", phone_skip_
       (复用同窗口重发 auth_url 不改变其决定)。返回 None 视为重置失败，沿用旧 page。
     返回 (code, session_id, state, msg)；失败 code 为 None。code 与返回的 session_id/state 必配套。"""
     last_msg = ""
-    total = max(1, phone_skip_attempts) + 1
+    # phone_skip_attempts 次免手机直连 + 1 次接码兜底；skip<=0 时直接一次性接码(不赌免手机)
+    total = phone_skip_attempts + 1 if phone_skip_attempts > 0 else 1
     for attempt in range(total):
         is_phone_attempt = attempt >= phone_skip_attempts
         # 每次尝试前关窗口重开+重登，确保是全新会话(否则同窗口重试不改变风控决定)
