@@ -101,18 +101,13 @@ SCRIPTS = [
     },
     {
         "id": "register_grok",
-        "file": "register_grok.py",
+        "file": "register_grok_http.py",
         "category": "单平台注册",
         "title": "Grok 注册",
-        "desc": "Grok 单平台注册(需能过 Cloudflare 的干净节点)。",
+        "desc": "Grok 纯 HTTP 协议注册(curl_cffi 直连 accounts.x.ai + gRPC-web 发码验码 + CapSolver 过 Turnstile，不开浏览器)。需能过 Cloudflare 的干净节点 + 临时邮箱 + CapSolver key。",
         "args": [
             {"flag": "--count", "type": "int", "default": 1, "help": "注册数量"},
-            {"flag": "--concurrency", "type": "int", "default": 1, "help": "并发数"},
-            {"flag": "--timeout", "type": "int", "default": 600, "help": "单号超时(秒)"},
-            {"flag": "--node", "type": "str", "default": "auto", "help": "Clash 出口节点(过 grok CF)"},
-            {"flag": "--email", "type": "str", "default": "", "help": "指定邮箱(绕过池)"},
-            {"flag": "--password", "type": "str", "default": "", "help": "邮箱密码"},
-            {"flag": "--keep-on-fail", "type": "bool", "default": False, "help": "失败保留窗口"},
+            {"flag": "--node", "type": "str", "default": "auto", "help": "Clash 出口节点(过 grok CF，如 '美国 01'，留 auto 自动探测)"},
         ],
     },
     {
