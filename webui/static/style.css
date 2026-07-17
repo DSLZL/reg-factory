@@ -209,7 +209,7 @@ body{margin:0;background:var(--bg);color:var(--text);
   .contact-button{font-size:12px}
   .status{font-size:11px}
   .status-item:nth-child(1){display:none}
-  .node{max-width:115px}
+  .node{display:none}
   .content{padding:8px}
   #view-run{gap:8px}
   .panel{padding:12px;border-radius:6px}
